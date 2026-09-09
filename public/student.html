@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>👀 Track My Bus - School Bus Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        .student-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+        
+        .student-header {
+            background: linear-gradient(135deg, #059669, #047857);
+            color: white;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        
+        .student-header h1 {
+            margin: 0 0 4px;
+            font-size: 1.5rem;
+        }
+        
+        .student-header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        
+        .status-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        
+        .bus-selector {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 1rem;
+            margin-bottom: 12px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .bus-selector:focus {
+            border-color: #059669;
+            outline: none;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #059669;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #047857;
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        #studentMap {
+            height: 400px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            z-index: 1;
+        }
+        
+        .bus-info-bar {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .bus-info-bar .bus-name {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #166534;
+        }
+        
+        .bus-info-bar .route-name {
+            font-size: 0.9rem;
+            color: #16a34a;
+        }
+        
+        .bus-info-bar .eta-info {
+            font-size: 0.85rem;
+            color: #6b7280;
+            margin-top: 8px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        
+        .stat-box {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .stat-box .stat-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        
+        .stat-box .stat-label {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        
+        .no-bus {
+            text-align: center;
+            padding: 30px;
+            color: #6b7280;
+        }
+        
+        .no-bus .big-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+        
+        .no-bus h3 {
+            margin: 0 0 8px;
+            color: #374151;
+        }
+        
+        .offline-banner {
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            text-align: center;
+            color: #92400e;
+            display: none;
+        }
+        
+        .refresh-btn {
+            background: none;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+        }
+        
+        .refresh-btn:hover {
+            background: #f9fafb;
+        }
+        
+        .last-update {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-align: center;
+            margin-top: 8px;
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid {
+                gap: 6px;
+            }
+            .student-container {
+                padding: 10px;
+            }
+            #studentMap {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="student-container">
+        <div class="student-header">
+            <h1>👀 Track My Bus</h1>
+            <p>Real-time school bus location tracking</p>
+        </div>
+
+        <div id="offlineBanner" class="offline-banner">
+            ⚠️ The bus is currently offline. It may appear once the driver starts sharing.
+        </div>
+
+        <div class="status-card">
+            <select id="busSelector" class="bus-selector">
+                <option value="">-- Select a bus to track --</option>
+            </select>
+            <button class="btn btn-primary" id="trackBtn" disabled>🔍 Track This Bus</button>
+        </div>
+
+        <div id="busInfoBar" class="bus-info-bar" style="display:none;">
+            <div class="bus-name" id="displayBusName">Bus #12</div>
+            <div class="route-name" id="displayRouteName">Main Route</div>
+            <div class="eta-info" id="displayETA">📍 Tracking live...</div>
+        </div>
+
+        <div id="studentMap"></div>
+
+        <div class="status-card">
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="statSpeed">-</div>
+                    <div class="stat-label">Speed</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="statStatus">⚪</div>
+                    <div class="stat-label">Status</div>
+                </div>
+            </div>
+            <div class="last-update" id="lastUpdate">Waiting for bus location...</div>
+        </div>
+
+        <div style="text-align:center;margin-top:8px;">
+            <a href="index.html" style="color:#6b7280;font-size:0.85rem;text-decoration:none;">← Back to Home</a>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let map = null;
+        let busMarker = null;
+        let busCircle = null;
+        let currentBusId = null;
+        let isTracking = false;
+        let trackedBuses = new Map(); // busId -> { marker, circle, info }
+
+        // Get busId from URL
+        function getBusIdFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('busId');
+        }
+
+        // Initialize map centered on a default location
+        function initMap(lat = 20.5937, lng = 78.9629) {
+            if (map) return;
+            map = L.map('studentMap', {
+                zoomControl: true
+            }).setView([lat, lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                maxZoom: 19
+            }).addTo(map);
+            setTimeout(() => map.invalidateSize(), 200);
+        }
+
+        // Custom bus icon for student view
+        function createBusIcon(heading = 0) {
+            return L.divIcon({
+                html: `<div style="transform:rotate(${heading}deg);font-size:28px;line-height:1;">🚍</div>`,
+                className: 'bus-marker-student',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+        }
+
+        // Update or create bus marker
+        function updateBusOnMap(busId, data) {
+            if (!map) initMap(data.location.lat, data.location.lng);
+
+            const {
+                location,
+                heading,
+                speed,
+                busName,
+                routeName
+            } = data;
+
+            if (trackedBuses.has(busId)) {
+                const tracked = trackedBuses.get(busId);
+                tracked.marker.setLatLng([location.lat, location.lng]);
+                tracked.marker.setIcon(createBusIcon(heading || 0));
+                tracked.circle.setLatLng([location.lat, location.lng]);
+                map.panTo([location.lat, location.lng], {
+                    animate: true,
+                    duration: 0.5
+                });
+            } else {
+                const marker = L.marker([location.lat, location.lng], {
+                    icon: createBusIcon(heading || 0)
+                }).addTo(map);
+
+                const circle = L.circle([location.lat, location.lng], {
+                    radius: 30,
+                    color: '#059669',
+                    fillColor: '#059669',
+                    fillOpacity: 0.08,
+                    weight: 2
+                }).addTo(map);
+
+                marker.bindPopup(`
+                    <div style="text-align:center;font-family:sans-serif;">
+                        <div style="font-size:1.2rem;font-weight:bold;">🚍 ${busName}</div>
+                        <div style="font-size:0.85rem;color:#6b7280;">${routeName}</div>
+                        <hr style="margin:4px 0;">
+                        <div>Speed: ${speed ? Math.round(speed * 3.6) : 0} km/h</div>
+                    </div>
+                `);
+
+                trackedBuses.set(busId, {
+                    marker,
+                    circle
+                });
+                map.setView([location.lat, location.lng], 15);
+            }
+
+            // Update info bar
+            document.getElementById('displayBusName').textContent = busName;
+            document.getElementById('displayRouteName').textContent = routeName;
+            document.getElementById('busInfoBar').style.display = 'block';
+
+            // Update stats
+            document.getElementById('statSpeed').textContent = speed ? Math.round(speed * 3.6) + ' km/h' : 'Moving';
+            document.getElementById('statStatus').textContent = '🟢';
+            document.getElementById('lastUpdate').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+
+            document.getElementById('offlineBanner').style.display = 'none';
+        }
+
+        // Request bus list from server
+        function refreshBusList() {
+            socket.emit('student:getBuses');
+        }
+
+        socket.on('student:busList', (buses) => {
+            const selector = document.getElementById('busSelector');
+            const currentVal = selector.value;
+
+            // Clear existing options (keep the first placeholder)
+            while (selector.options.length > 1) {
+                selector.remove(1);
+            }
+
+            if (buses.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '🚌 No buses available right now';
+                opt.disabled = true;
+                selector.appendChild(opt);
+                document.getElementById('offlineBanner').style.display = 'block';
+            } else {
+                document.getElementById('offlineBanner').style.display = 'none';
+                buses.forEach(bus => {
+                    const opt = document.createElement('option');
+                    opt.value = bus.busId;
+                    opt.textContent = `${bus.busName} - ${bus.routeName}`;
+                    if (bus.busId === currentVal) opt.selected = true;
+                    selector.appendChild(opt);
+                });
+            }
+
+            document.getElementById('trackBtn').disabled = !buses.length;
+
+            // If we had a specific busId in URL and it's now in list, auto-track
+            const urlBusId = getBusIdFromUrl();
+            if (urlBusId && !isTracking) {
+                const match = buses.find(b => b.busId === urlBusId);
+                if (match) {
+                    selector.value = urlBusId;
+                    startTracking(urlBusId);
+                }
+            }
+        });
+
+        // Track button click
+        document.getElementById('trackBtn').addEventListener('click', () => {
+            const busId = document.getElementById('busSelector').value;
+            if (busId) startTracking(busId);
+        });
+
+        function startTracking(busId) {
+            if (isTracking && currentBusId === busId) return;
+
+            // Stop previous tracking
+            if (currentBusId && currentBusId !== busId) {
+                socket.emit('student:stopTracking', currentBusId);
+                // Clean up old marker
+                if (trackedBuses.has(currentBusId)) {
+                    const old = trackedBuses.get(currentBusId);
+                    map.removeLayer(old.marker);
+                    map.removeLayer(old.circle);
+                    trackedBuses.delete(currentBusId);
+                }
+            }
+
+            currentBusId = busId;
+            isTracking = true;
+
+            // Clear all existing non-tracked bus markers
+            socket.emit('student:trackBus', busId);
+        }
+
+        socket.on('student:trackingStarted', (data) => {
+            if (data.success) {
+                document.getElementById('trackBtn').textContent = '📍 Tracking Live';
+                document.getElementById('trackBtn').disabled = true;
+                document.querySelector('.student-header h1').textContent = `👀 Tracking Bus`;
+            } else {
+                alert('Could not track this bus. It may have gone offline.');
+            }
+        });
+
+        // Receive location updates
+        socket.on('student:locationUpdate', (data) => {
+            if (data.busId === currentBusId) {
+                updateBusOnMap(data.busId, data);
+            }
+        });
+
+        // Bus went offline
+        socket.on('student:busOffline', (data) => {
+            if (data.busId === currentBusId) {
+                document.getElementById('offlineBanner').style.display = 'block';
+                document.getElementById('statStatus').textContent = '⚪';
+                document.getElementById('statSpeed').textContent = '-';
+                document.getElementById('lastUpdate').textContent = 'Bus went offline';
+
+                // Clean up
+                if (trackedBuses.has(data.busId)) {
+                    const t = trackedBuses.get(data.busId);
+                    map.removeLayer(t.marker);
+                    map.removeLayer(t.circle);
+                    trackedBuses.delete(data.busId);
+                }
+
+                isTracking = false;
+                currentBusId = null;
+                document.getElementById('trackBtn').textContent = '🔍 Track This Bus';
+                document.getElementById('trackBtn').disabled = false;
+
+                // Refresh list
+                setTimeout(refreshBusList, 2000);
+            }
+        });
+
+        // Auto-refresh bus list every 5 seconds
+        setInterval(refreshBusList, 5000);
+
+        // On connect, request buses
+        socket.on('connect', () => {
+            refreshBusList();
+        });
+
+        // Initialize
+        initMap();
+        refreshBusList();
+
+        // Handle URL param for auto-tracking
+        window.addEventListener('load', () => {
+            const urlBusId = getBusIdFromUrl();
+            if (urlBusId) {
+                // The bus list refresh will pick this up
+                document.querySelector('.student-header h1').textContent = '👀 Loading bus...';
+            }
+        });
+    </script>
+</body>
+
+</html>

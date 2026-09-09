@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🚍 Driver - School Bus Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        .driver-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+        
+        .driver-header {
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+            color: white;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        
+        .driver-header h1 {
+            margin: 0 0 4px;
+            font-size: 1.5rem;
+        }
+        
+        .driver-header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        
+        .status-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 12px;
+        }
+        
+        .status-indicator.active {
+            background: #dcfce7;
+        }
+        
+        .status-indicator.inactive {
+            background: #fee2e2;
+        }
+        
+        .status-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+        }
+        
+        .status-dot.active {
+            background: #16a34a;
+            box-shadow: 0 0 8px rgba(22, 163, 74, 0.5);
+            animation: pulse-dot 2s infinite;
+        }
+        
+        .status-dot.inactive {
+            background: #dc2626;
+        }
+        
+        @keyframes pulse-dot {
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5);
+            }
+            50% {
+                box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
+            }
+        }
+        
+        .bus-info-form {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .bus-info-form label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #374151;
+        }
+        
+        .bus-info-form input {
+            padding: 10px 14px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+        
+        .bus-info-form input:focus {
+            border-color: #2563eb;
+            outline: none;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+        
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+        
+        .btn-success {
+            background: #16a34a;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #15803d;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        #driverMap {
+            height: 350px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            z-index: 1;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        
+        .stat-box {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .stat-box .stat-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        
+        .stat-box .stat-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 2px;
+        }
+        
+        .tracking-url {
+            background: #f0fdf4;
+            border: 2px dashed #86efac;
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 12px;
+            text-align: center;
+        }
+        
+        .tracking-url code {
+            display: block;
+            background: white;
+            padding: 8px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            word-break: break-all;
+            margin-top: 6px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .share-hint {
+            font-size: 0.8rem;
+            color: #16a34a;
+            font-weight: 500;
+        }
+        
+        .student-count {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: #6b7280;
+        }
+        
+        .coords-display {
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #6b7280;
+            text-align: center;
+            margin-top: 8px;
+        }
+        
+        .error-msg {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            display: none;
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 6px;
+            }
+            .driver-container {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="driver-container">
+        <div class="driver-header">
+            <h1>🚍 Driver Dashboard</h1>
+            <p>Share your location so students can track the bus</p>
+        </div>
+
+        <div class="status-card">
+            <div class="status-indicator" id="statusIndicator">
+                <div class="status-dot inactive" id="statusDot"></div>
+                <div>
+                    <div style="font-weight:600;" id="statusText">Not sharing location</div>
+                    <div style="font-size:0.8rem;color:#6b7280;" id="statusDetail">Start broadcasting to help students find you</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-card">
+            <div class="bus-info-form">
+                <label>Bus Name / Number</label>
+                <input type="text" id="busName" placeholder="e.g. Bus #12" value="School Bus">
+
+                <label>Route Name</label>
+                <input type="text" id="routeName" placeholder="e.g. Main Route" value="Morning Route">
+
+                <button class="btn btn-success" id="startBtn">▶ Start Sharing Location</button>
+                <button class="btn btn-danger" id="stopBtn" style="display:none;">■ Stop Sharing</button>
+            </div>
+
+            <div id="errorMsg" class="error-msg"></div>
+
+            <div id="trackingUrlBox" class="tracking-url" style="display:none;">
+                <div class="share-hint">📤 Share this link with students & parents to track the bus:</div>
+                <code id="trackingUrl"></code>
+                <button class="btn btn-primary" style="margin-top:8px;padding:8px 16px;font-size:0.85rem;" onclick="copyTrackingUrl()">📋 Copy Link</button>
+            </div>
+        </div>
+
+        <div id="driverMap"></div>
+
+        <div class="status-card">
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="statSpeed">0</div>
+                    <div class="stat-label">Speed (km/h)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="statStudents">0</div>
+                    <div class="stat-label">Watching</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="statAccuracy">-</div>
+                    <div class="stat-label">Accuracy (m)</div>
+                </div>
+            </div>
+            <div class="coords-display" id="coordsDisplay">Waiting for GPS...</div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let watchId = null;
+        let isSharing = false;
+        let busId = null;
+        let driverMarker = null;
+        let driverCircle = null;
+        let map = null;
+
+        // Initialize map
+        function initMap(lat, lng) {
+            map = L.map('driverMap', {
+                zoomControl: true
+            }).setView([lat, lng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Custom bus icon
+            const busIcon = L.divIcon({
+                html: '🚍',
+                className: 'bus-marker',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+
+            driverMarker = L.marker([lat, lng], {
+                icon: busIcon
+            }).addTo(map);
+            driverCircle = L.circle([lat, lng], {
+                radius: 20,
+                color: '#2563eb',
+                fillOpacity: 0.1
+            }).addTo(map);
+
+            // Add a simple compass arrow
+            setTimeout(() => map.invalidateSize(), 100);
+        }
+
+        // Update marker with heading rotation
+        function updateMarker(lat, lng, heading, accuracy) {
+            if (!map) {
+                initMap(lat, lng);
+                return;
+            }
+
+            driverMarker.setLatLng([lat, lng]);
+            if (driverCircle) {
+                driverCircle.setLatLng([lat, lng]);
+                driverCircle.setRadius(accuracy || 20);
+            }
+
+            // Rotate the bus emoji based on heading
+            const busIcon = L.divIcon({
+                html: `<div style="transform:rotate(${heading||0}deg)">🚍</div>`,
+                className: 'bus-marker',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+            driverMarker.setIcon(busIcon);
+
+            map.panTo([lat, lng], {
+                animate: true,
+                duration: 0.5
+            });
+        }
+
+        // Get bus ID from URL or generate
+        function getBusIdFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('busId');
+        }
+
+        // Start sharing
+        document.getElementById('startBtn').addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showError('GPS is not supported on this device/browser');
+                return;
+            }
+
+            const busName = document.getElementById('busName').value.trim() || 'School Bus';
+            const routeName = document.getElementById('routeName').value.trim() || 'Main Route';
+            const urlBusId = getBusIdFromUrl();
+
+            // Register with server
+            socket.emit('driver:register', {
+                busName,
+                routeName,
+                busId: urlBusId
+            });
+        });
+
+        socket.on('driver:registered', (data) => {
+            if (data.success) {
+                busId = data.busId;
+                startGPS();
+            } else {
+                showError('Failed to register bus');
+            }
+        });
+
+        function startGPS() {
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 3000
+            };
+
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const {
+                        latitude,
+                        longitude,
+                        accuracy,
+                        heading,
+                        speed
+                    } = pos.coords;
+
+                    // Update UI
+                    document.getElementById('statSpeed').textContent = speed ? Math.round(speed * 3.6) : '0';
+                    document.getElementById('statAccuracy').textContent = accuracy ? Math.round(accuracy) : '-';
+                    document.getElementById('coordsDisplay').textContent =
+                        `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+
+                    // Update map
+                    updateMarker(latitude, longitude, heading, accuracy);
+
+                    // Send to server
+                    socket.emit('driver:updateLocation', {
+                        busId,
+                        lat: latitude,
+                        lng: longitude,
+                        heading: heading || 0,
+                        speed: speed || 0
+                    });
+
+                    // Update status
+                    if (!isSharing) {
+                        isSharing = true;
+                        updateUI(true);
+                    }
+                },
+                (err) => {
+                    let msg = 'GPS error: ';
+                    switch (err.code) {
+                        case 1:
+                            msg += 'Location permission denied. Please enable GPS.';
+                            break;
+                        case 2:
+                            msg += 'GPS unavailable. Check your location settings.';
+                            break;
+                        case 3:
+                            msg += 'GPS timeout. Try moving to an open area.';
+                            break;
+                        default:
+                            msg += err.message;
+                    }
+                    showError(msg);
+                },
+                options
+            );
+        }
+
+        // Stop sharing
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            isSharing = false;
+            updateUI(false);
+            document.getElementById('trackingUrlBox').style.display = 'none';
+
+            // Notify server (disconnect will handle cleanup)
+            window.location.reload();
+        });
+
+        socket.on('student:trackingStarted', () => {}); // ignore
+
+        // Update student count
+        socket.on('student:locationUpdate', (data) => {
+            // Only used to count students - we track via student count events
+        });
+
+        // We don't have a direct student count event, so let's not add complexity
+        // The driver just focuses on sharing
+
+        function updateUI(sharing) {
+            if (sharing) {
+                document.getElementById('statusIndicator').className = 'status-indicator active';
+                document.getElementById('statusDot').className = 'status-dot active';
+                document.getElementById('statusText').textContent = '🟢 Sharing Location';
+                document.getElementById('statusDetail').textContent = 'Students can now see your bus on the map';
+                document.getElementById('startBtn').style.display = 'none';
+                document.getElementById('stopBtn').style.display = 'block';
+
+                // Show tracking URL
+                const baseUrl = window.location.origin;
+                document.getElementById('trackingUrl').textContent = `${baseUrl}/student.html?busId=${busId}`;
+                document.getElementById('trackingUrlBox').style.display = 'block';
+            } else {
+                document.getElementById('statusIndicator').className = 'status-indicator inactive';
+                document.getElementById('statusDot').className = 'status-dot inactive';
+                document.getElementById('statusText').textContent = 'Not sharing location';
+                document.getElementById('statusDetail').textContent = 'Start broadcasting to help students find you';
+                document.getElementById('startBtn').style.display = 'block';
+                document.getElementById('stopBtn').style.display = 'none';
+            }
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
+        }
+
+        function copyTrackingUrl() {
+            const url = document.getElementById('trackingUrl').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                alert('✅ Link copied! Share it with students & parents.');
+            }).catch(() => {
+                // Fallback
+                const textarea = document.createElement('textarea');
+                textarea.value = url;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert('✅ Link copied!');
+            });
+        }
+
+        // Handle disconnect
+        socket.on('disconnect', () => {
+            document.getElementById('statusDetail').textContent = '🔄 Reconnecting...';
+        });
+        socket.on('connect', () => {
+            if (isSharing) {
+                document.getElementById('statusDetail').textContent = '✅ Connected, sharing location';
+            }
+        });
+    </script>
+</body>
+
+</html>
